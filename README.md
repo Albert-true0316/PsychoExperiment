@@ -14,10 +14,22 @@
 - 被试的元认知预测是否与真实表现一致，以及不同条件下校准误差是否变化。
 
 ### 研究问题与假设
-- H1（认知卸载效应）：`cloud` 与 `ai` 组在 `listA_score` 低于 `control` 组。
-- H2（组间差异）：`ai` 组在 `listA_score` 的下降幅度可能大于 `cloud` 组。
-- H3（操纵成功）：`manip_a_represent`、`manip_b_represent`、`manip_instruction_trust` 在组间存在预期方向差异。
-- H4（元认知）：各组可能出现不同程度的高估（`metacog_error_a`、`metacog_error_b`）。
+本研究围绕“外部可得性预期是否改变记忆编码与元认知判断”提出以下可检验假设：
+
+- H1（认知卸载主效应）：与 `control` 组相比，`cloud` 与 `ai` 组在 List A 测验中的客观记忆成绩显著降低。  
+  **字段映射：** 自变量 `condition`；因变量 `listA_score`；协变量建议 `baseline_score`、`ai_freq`、`excluded`。
+
+- H2（卸载强度差异假设）：与 `cloud` 组相比，`ai` 组在 List A 成绩上的下降幅度更大（即 `ai < cloud`）。  
+  **字段映射：** 自变量 `condition`（重点比较 `ai` vs `cloud`）；因变量 `listA_score`。
+
+- H3（操纵有效性假设）：三组在“可再次查看/呈现预期”及“提示语可信度”上存在显著组间差异，且方向与实验操纵一致。  
+  **字段映射：** 自变量 `condition`；操纵检查因变量 `manip_a_represent`、`manip_b_represent`、`manip_instruction_trust`；行为辅助指标 `blocked_view_attempts_listb`（用于描述或稳健性分析）。
+
+- H4（元认知校准假设）：被试对自身记忆表现存在系统性偏差，且该偏差在不同组别间的幅度不同。  
+  **字段映射：** 预测变量 `metacog_pred_a`、`metacog_pred_b`；实际表现 `listA_score`、`listB_score`；派生指标 `metacog_error_a`、`metacog_error_b`（由导出数据自动计算）；组别变量 `condition`。
+
+- H5（资源回调/释放探索假设）：在 List B 明确“不可再次呈现”条件下，组间差异可能减弱或出现回调。  
+  **字段映射：** 自变量 `condition`；因变量 `listB_score`；可结合 `manip_b_represent` 与 `manip_instruction_trust` 做稳健性检验。
 
 ## 项目结构
 
