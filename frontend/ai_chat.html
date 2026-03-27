@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI 助手</title>
+  <link rel="stylesheet" href="styles/main.css">
+</head>
+<body class="subpage-body chat-container">
+  <div class="subpage-header">
+    <div class="dot" style="width:8px;height:8px;border-radius:50%;background:var(--accent)"></div>
+    <span class="sp-title">AI 学习助手</span>
+    <span class="subpage-badge" id="status-badge">已连接</span>
+  </div>
+
+  <div class="subpage-disconnected-banner" id="disconnected-banner">连接已断开，无法继续使用。</div>
+
+  <div class="chat-area" id="chat-area">
+    <div class="msg ai">您好！我已存储您本次学习的全部内容。您可以问我「我学了什么」，或直接询问某个具体知识点。</div>
+  </div>
+
+  <div class="chat-input-area">
+    <textarea id="user-input" class="chat-input" rows="1" placeholder="输入消息…"></textarea>
+    <button id="send-btn" class="chat-send-btn">发送</button>
+  </div>
+
+  <script>
+    const STORED = [
+      '蜜蜂飞行时，每秒钟拍打翅膀约200次。',
+      '成年人的肺部全部展开后，总面积约为70平方米，相当于一个网球场的一半。',
+      '月球反射的阳光从月球抵达地球约需1.3秒。',
+      '世界上最深的淡水湖贝加尔湖，最大深度约为1642米。',
+      '蟑螂在被切除头部后仍可存活约9天，最终因无法饮水而死亡。',
+      '人体大约由37万亿个细胞组成。',
+      '蜗牛的口腔内约有14000颗细小的牙齿，排列在称为齿舌的器官上。',
+      '猫的每只耳朵由32块独立的肌肉控制，因此能精准转动朝向声源。',
+      '蓝鲸的心脏重量约为180公斤，每次心跳声在3公里外仍可被探测到。',
+      '鸵鸟的眼球直径约为5厘米，比它自己的大脑还要大。',
+      '土星的平均密度约为0.69克/立方厘米，比水还轻，理论上可以漂浮在足够大的水面上。',
+      '大象的妊娠期约为22个月，是陆地哺乳动物中妊娠期最长的。',
+      '金枪鱼的游速最高可达每小时75公里，是海洋中速度最快的鱼类之一。',
+      '竹子在生长旺季一天最多可以生长约91厘米，是世界上生长速度最快的植物之一。',
+      '地球上现存生物约有870万种（不含细菌等微生物），其中约四分之三尚未被科学记录。',
+      '一个普通喷嚏中喷出的气体速度约为每小时160公里。',
+      '人类指甲平均每月生长约3.5毫米，趾甲的生长速度约为其一半。',
+      '海马每天最多可以吃掉约3000只小型甲壳类动物，因为它们没有胃，消化极快。',
+      '雪豹的尾巴几乎与身体等长，长度约为80至105厘米，可在睡眠时缠绕身体保暖。',
+      '成年人每天约脱落30000至40000个皮肤细胞，每隔约27天便完成一次皮肤的完全更新。'
+    ];
+
+    const KEYWORDS = [
+      ['蜜蜂','翅膀','每秒','200次'],
+      ['肺部','肺','70平方','网球场'],
+      ['月球','1.3秒','月光抵达'],
+      ['贝加尔','1642','淡水湖'],
+      ['蟑螂','头部','9天','无法饮水'],
+      ['细胞','37万亿'],
+      ['蜗牛','牙齿','14000','齿舌'],
+      ['猫','耳朵','32块','肌肉控制'],
+      ['蓝鲸','心脏','180公斤'],
+      ['鸵鸟','眼球','5厘米'],
+      ['土星','密度','0.69','漂浮'],
+      ['大象','妊娠','22个月'],
+      ['金枪鱼','75公里','游速'],
+      ['竹子','91厘米','生长最快'],
+      ['870万','物种','生物种数'],
+      ['喷嚏','160公里'],
+      ['指甲','3.5毫米','指甲生长'],
+      ['海马','3000只','甲壳'],
+      ['雪豹','尾巴','80至105'],
+      ['皮肤细胞','脱落','27天']
+    ];
+
+    let disconnected = false;
+
+    function setDisconnected() {
+      disconnected = true;
+      document.getElementById('chat-area').innerHTML = '';
+      document.getElementById('disconnected-banner').style.display = 'block';
+      const badge = document.getElementById('status-badge');
+      badge.textContent = '已断开';
+      badge.classList.add('disconnected');
+      document.getElementById('user-input').disabled = true;
+      document.getElementById('send-btn').disabled = true;
+    }
+
+    if (localStorage.getItem('listA_test_started') === '1') {
+      document.addEventListener('DOMContentLoaded', setDisconnected);
+    }
+    window.addEventListener('storage', function(e) {
+      if (e.key === 'listA_test_started' && e.newValue === '1') setDisconnected();
+    });
+
+    function findResponse(input) {
+      const text = input.trim();
+      if (/你是谁|什么模型|什么AI|真的AI|假的|能上网|联网|天气|新闻|时间|日期|你叫什么/.test(text)) {
+        return '我是本次实验专属的学习助手，仅用于存储和回顾您的学习内容，不具备其他功能。';
+      }
+      if (/学了什么|记录了什么|存了什么|保存了什么|内容是什么|列出|全部|所有/.test(text)) {
+        return '以下是我为您存储的全部学习内容：\n\n' +
+          STORED.map((s, i) => `${i + 1}. ${s}`).join('\n');
+      }
+      let bestIdx = -1, bestScore = 0;
+      for (let i = 0; i < KEYWORDS.length; i++) {
+        const score = KEYWORDS[i].filter(kw => text.includes(kw)).length;
+        if (score > bestScore) { bestScore = score; bestIdx = i; }
+      }
+      if (bestScore > 0) return `根据我存储的内容：${STORED[bestIdx]}`;
+      if (/几条|多少条|多少个|几个/.test(text)) return `我共为您存储了 ${STORED.length} 条学习内容。`;
+      return '我目前只存储了您本次学习的内容。如需查看，可以问我「我学了什么」或询问具体的知识点。';
+    }
+
+    function appendMsg(text, role) {
+      const div = document.createElement('div');
+      div.className = 'msg ' + role;
+      div.textContent = text;
+      document.getElementById('chat-area').appendChild(div);
+      div.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function send() {
+      if (disconnected) return;
+      const input = document.getElementById('user-input');
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = '';
+      appendMsg(text, 'user');
+      const typing = document.createElement('div');
+      typing.className = 'typing';
+      typing.textContent = 'AI 正在输入…';
+      document.getElementById('chat-area').appendChild(typing);
+      typing.scrollIntoView({ behavior: 'smooth' });
+      setTimeout(() => {
+        typing.remove();
+        appendMsg(findResponse(text), 'ai');
+      }, 600 + Math.random() * 600);
+    }
+
+    document.getElementById('send-btn').addEventListener('click', send);
+    document.getElementById('user-input').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+    });
+  </script>
+</body>
+</html>

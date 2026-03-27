@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>云端已保存内容</title>
+  <link rel="stylesheet" href="styles/main.css">
+</head>
+<body class="subpage-body">
+  <div class="subpage-header">
+    <div class="dot" style="width:8px;height:8px;border-radius:50%;background:var(--accent)"></div>
+    <div>
+      <div class="sp-title">云端存储 &mdash; listA</div>
+      <div style="font-size:0.78rem;color:var(--text-muted);margin-top:2px" id="save-time"></div>
+    </div>
+    <span class="subpage-badge" id="status-badge">已同步</span>
+  </div>
+
+  <div class="subpage-disconnected-banner" id="disconnected-banner">文件已损毁，无法查看。</div>
+
+  <div class="subpage-container">
+    <div id="list-container"><p style="color:var(--text-muted)">加载中...</p></div>
+    <div class="subpage-footer">本页内容由云端自动保存，仅供本次实验参考。</div>
+  </div>
+
+  <script>
+    function showCorrupted() {
+      document.getElementById('list-container').innerHTML = '';
+      document.getElementById('disconnected-banner').style.display = 'block';
+      const badge = document.getElementById('status-badge');
+      badge.textContent = '已损毁';
+      badge.classList.add('disconnected');
+    }
+
+    if (localStorage.getItem('listA_test_started') === '1') {
+      document.addEventListener('DOMContentLoaded', showCorrupted);
+    } else {
+      document.addEventListener('DOMContentLoaded', function() {
+        document.getElementById('save-time').textContent =
+          '保存时间：' + new Date().toLocaleString('zh-CN');
+        fetch('stimuli/listA.json')
+          .then(r => r.json())
+          .then(data => {
+            document.getElementById('list-container').innerHTML = data.map((item, i) =>
+              `<div class="subpage-item">
+                <div class="sp-num">${i + 1}</div>
+                <div class="sp-text">${item.statement}</div>
+              </div>`
+            ).join('');
+          })
+          .catch(() => {
+            document.getElementById('list-container').innerHTML =
+              '<p style="color:#ff3b30">内容加载失败。</p>';
+          });
+      });
+    }
+
+    window.addEventListener('storage', function(e) {
+      if (e.key === 'listA_test_started' && e.newValue === '1') showCorrupted();
+    });
+  </script>
+</body>
+</html>
