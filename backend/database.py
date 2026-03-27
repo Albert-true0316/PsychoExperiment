@@ -43,14 +43,28 @@ def init_db():
 
     CREATE TABLE IF NOT EXISTS questionnaires (
         participant_id      TEXT PRIMARY KEY REFERENCES participants(id),
-        manip_check_bool    INTEGER,     -- 是否相信内容被保存 1/0
-        manip_trust         INTEGER,     -- 信任度 1-7
+        manip_a_represent   INTEGER,     -- List A 预期可再次查看/调用 1/0
+        manip_b_represent   INTEGER,     -- List B 预期可再次呈现 1/0
+        manip_instruction_trust INTEGER, -- 对提示语可信度 1-7
         metacog_pred_a      INTEGER,     -- 预测List A答对几题
         metacog_pred_b      INTEGER,     -- 预测List B答对几题
         cognitive_dep       INTEGER,     -- 认知依赖程度 1-7
-        suspected_deception INTEGER      -- 事后是否怀疑过欺骗 1/0
+        suspected_deception INTEGER,     -- 事后是否怀疑过欺骗 1/0
+        blocked_view_attempts_listb INTEGER DEFAULT 0 -- List B 阶段被拦截次数
     );
     """)
+
+    # 兼容旧数据库：增量补齐新字段
+    cur.execute("PRAGMA table_info(questionnaires)")
+    cols = {row["name"] for row in cur.fetchall()}
+    if "manip_a_represent" not in cols:
+        cur.execute("ALTER TABLE questionnaires ADD COLUMN manip_a_represent INTEGER")
+    if "manip_b_represent" not in cols:
+        cur.execute("ALTER TABLE questionnaires ADD COLUMN manip_b_represent INTEGER")
+    if "manip_instruction_trust" not in cols:
+        cur.execute("ALTER TABLE questionnaires ADD COLUMN manip_instruction_trust INTEGER")
+    if "blocked_view_attempts_listb" not in cols:
+        cur.execute("ALTER TABLE questionnaires ADD COLUMN blocked_view_attempts_listb INTEGER DEFAULT 0")
 
     conn.commit()
     conn.close()

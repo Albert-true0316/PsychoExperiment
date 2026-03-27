@@ -33,9 +33,11 @@ class SubmitData(BaseModel):
 
 class QuestionnaireData(BaseModel):
     participant_id: str
-    manip_check_bool: int      # 1/0
-    manip_trust: int           # 1-7
+    manip_a_represent: int     # List A 预期可再次查看/调用（1=是，0=否）
+    manip_b_represent: int     # List B 预期可再次呈现（1=是，0=否）
+    manip_instruction_trust: int  # 对提示语可信度评价 1-7
     metacog_pred_a: int        # 0-20
     metacog_pred_b: int        # 0-20
     cognitive_dep: int         # 1-7
     suspected_deception: int   # 1/0
+    blocked_view_attempts_listb: int = 0  # List B 阶段被拦截的外部查看尝试次数

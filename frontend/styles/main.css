@@ -39,6 +39,17 @@ body {
 
 .jspsych-display-element { width: 100%; }
 
+/* Hide browser default focus outline on jsPsych container */
+.jspsych-display-element:focus,
+#jspsych-content:focus {
+  outline: none !important;
+}
+
+.jspsych-display-element::-moz-focus-inner,
+#jspsych-content::-moz-focus-inner {
+  border: 0;
+}
+
 /* --- 淡入动画 --- */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(12px); }
@@ -243,6 +254,7 @@ input[type=text]:focus { border-color: var(--accent); }
 
 /* --- 子页面（listA_cloud / ai_chat）共用 --- */
 .subpage-body {
+  display: block;
   background: var(--bg);
   background-image:
     radial-gradient(ellipse 60% 50% at 20% 30%, rgba(0,113,227,0.06) 0%, transparent 70%),
@@ -341,6 +353,8 @@ input[type=text]:focus { border-color: var(--accent); }
   display: flex;
   flex-direction: column;
   height: 100vh;
+  align-items: stretch;
+  justify-content: flex-start;
 }
 
 .chat-area {
@@ -349,10 +363,9 @@ input[type=text]:focus { border-color: var(--accent); }
   padding: 20px 24px;
   display: flex;
   flex-direction: column;
+  align-items: stretch;
   gap: 14px;
-  max-width: 700px;
   width: 100%;
-  margin: 0 auto;
   box-sizing: border-box;
 }
 
@@ -361,9 +374,7 @@ input[type=text]:focus { border-color: var(--accent); }
   border-top: 1px solid var(--border);
   display: flex;
   gap: 10px;
-  max-width: 700px;
   width: 100%;
-  margin: 0 auto;
   box-sizing: border-box;
 }
 

@@ -27,12 +27,14 @@ def generate_csv() -> str:
             SUM(CASE WHEN r.list_type='B' AND r.is_correct=1 THEN 1 ELSE 0 END)
                 AS listB_score,
             -- 问卷
-            q.manip_check_bool,
-            q.manip_trust,
+            q.manip_a_represent,
+            q.manip_b_represent,
+            q.manip_instruction_trust,
             q.metacog_pred_a,
             q.metacog_pred_b,
             q.cognitive_dep,
             q.suspected_deception,
+            q.blocked_view_attempts_listb,
             -- 元认知校准误差
             (q.metacog_pred_a - SUM(CASE WHEN r.list_type='A' AND r.is_correct=1 THEN 1 ELSE 0 END))
                 AS metacog_error_a,

@@ -85,7 +85,7 @@
     }
 
     if (localStorage.getItem('listA_test_started') === '1') {
-      document.addEventListener('DOMContentLoaded', setDisconnected);
+      setDisconnected();
     }
     window.addEventListener('storage', function(e) {
       if (e.key === 'listA_test_started' && e.newValue === '1') setDisconnected();

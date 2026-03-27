@@ -10,7 +10,7 @@ from .database import init_db, get_conn
 from .models import ParticipantIn, AssignOut, SubmitData, QuestionnaireData
 from .export import generate_csv
 
-app = FastAPI(title="认知卸载实验 API")
+app = FastAPI(title="认知卸载实验 API", docs_url="/api/docs", redoc_url="/api/redoc", openapi_url="/api/openapi.json")
 
 # 允许前端跨域请求（本地开发用）
 app.add_middleware(
@@ -116,12 +116,12 @@ def submit_questionnaire(data: QuestionnaireData):
     try:
         conn.execute(
             "INSERT OR REPLACE INTO questionnaires "
-            "(participant_id, manip_check_bool, manip_trust, "
-            " metacog_pred_a, metacog_pred_b, cognitive_dep, suspected_deception) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (data.participant_id, data.manip_check_bool, data.manip_trust,
+            "(participant_id, manip_a_represent, manip_b_represent, manip_instruction_trust, "
+            " metacog_pred_a, metacog_pred_b, cognitive_dep, suspected_deception, blocked_view_attempts_listb) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (data.participant_id, data.manip_a_represent, data.manip_b_represent, data.manip_instruction_trust,
              data.metacog_pred_a, data.metacog_pred_b,
-             data.cognitive_dep, data.suspected_deception)
+             data.cognitive_dep, data.suspected_deception, data.blocked_view_attempts_listb)
         )
         conn.commit()
     finally:

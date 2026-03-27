@@ -13,6 +13,9 @@
   let currentMath = null;
   let questionnaireData = {};
   let testStarted = false;
+  let viewAccessEnabled = false;
+  let inListBLearning = false;
+  let blockedViewAttemptsListB = 0;
   localStorage.removeItem('listA_test_started');
 
   // ─── 工具函数 ────────────────────────────────────────────────────────────────
@@ -70,7 +73,13 @@
         forced_condition: forcedCondition
       })
     });
+    if (!res.ok) {
+      throw new Error('register_failed');
+    }
     const data = await res.json();
+    if (!data || !['control', 'cloud', 'ai'].includes(data.condition)) {
+      throw new Error('invalid_condition');
+    }
     condition = data.condition;
   }
 
@@ -118,6 +127,51 @@
     });
   }
 
+  function updateAuxViewButtonState() {
+    const btn = document.getElementById('cloud-view-btn') || document.getElementById('ai-view-btn');
+    if (!btn) return;
+    if (viewAccessEnabled) {
+      btn.style.opacity = '1';
+      btn.style.cursor = 'pointer';
+      btn.style.borderColor = 'rgba(0,113,227,0.4)';
+    } else {
+      btn.style.opacity = '0.55';
+      btn.style.cursor = 'not-allowed';
+      btn.style.borderColor = 'rgba(0,113,227,0.22)';
+    }
+  }
+
+  function showHintToast(message) {
+    const oldToast = document.getElementById('exp-hint-toast');
+    if (oldToast) oldToast.remove();
+    const toast = document.createElement('div');
+    toast.id = 'exp-hint-toast';
+    toast.textContent = message;
+    toast.style.cssText = [
+      'position:fixed',
+      'left:50%',
+      'bottom:28px',
+      'transform:translateX(-50%)',
+      'z-index:10000',
+      'max-width:80vw',
+      'padding:10px 14px',
+      'border-radius:10px',
+      'background:rgba(29,29,31,0.92)',
+      'color:#fff',
+      'font-size:0.86rem',
+      'line-height:1.5',
+      'box-shadow:0 6px 16px rgba(0,0,0,0.18)',
+      'opacity:0',
+      'transition:opacity 0.18s ease'
+    ].join(';');
+    document.body.appendChild(toast);
+    requestAnimationFrame(() => { toast.style.opacity = '1'; });
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      setTimeout(() => toast.remove(), 220);
+    }, 2300);
+  }
+
   // ─── jsPsych 初始化 ──────────────────────────────────────────────────────────
   const jsPsych = initJsPsych({
     display_element: 'jspsych-content'
@@ -145,10 +199,10 @@
         <div class="card">
           <h2 >知情同意书</h2>
           <p style="line-height:1.8;margin-bottom:16px">
-            您好！感谢您参与本研究。本研究由心理学系课题组开展，旨在评估<strong>不同数字界面的用户体验与使用感受</strong>。
+            您好！感谢您参与本研究。本研究由心理学系课题组开展，旨在评估<strong>不同数字界面的用户体验与使用感受</strong>（每一被试随机分配界面）。
           </p>
           <p style="line-height:1.8;margin-bottom:16px">
-            实验约需 <strong>45 分钟</strong>，您将使用若干数字工具完成学习任务，并填写相关体验问卷。全程数据匿名收集，仅用于学术研究，不会泄露给任何第三方。
+            实验约需 <strong>45 分钟</strong>，您将在这一设计下完成学习任务，并填写相关体验问卷。全程数据匿名收集，仅用于学术研究，不会泄露给任何第三方。
           </p>
           <p style="line-height:1.8;margin-bottom:16px">
             您可以在任何时候退出实验，不会受到任何惩罚。若您同意参与，请点击下方按钮继续。
@@ -220,7 +274,13 @@
       on_finish: function() {
         // knows_google_effect 作为协变量传给服务器，不中断实验
         jsPsych.pauseExperiment();
-        apiRegister().then(() => jsPsych.resumeExperiment()).catch(() => jsPsych.resumeExperiment());
+        apiRegister()
+          .then(() => jsPsych.resumeExperiment())
+          .catch(() => {
+            document.getElementById('jspsych-content').innerHTML =
+              '<div class="card" style="text-align:center"><p style="color:#ff3b30">实验初始化失败（分组注册失败）。</p><p style="color:#86868b">请关闭页面并重新进入实验链接。</p></div>';
+            jsPsych.endExperiment('register_failed');
+          });
       }
     });
 
@@ -307,15 +367,23 @@
     // ── 7. List A 学习阶段说明 ──────────────────────────────────────────────
     timeline.push({
       type: jsPsychHtmlButtonResponse,
-      stimulus: `
+      stimulus: function() {
+        let hint = '请认真阅读并尽量记住每条信息的具体细节。';
+        if (condition === 'cloud') {
+          hint = '本阶段材料将自动保存至云端，后续阶段可点击左上角按钮查看。请认真阅读并尽量记住每条信息的具体细节。';
+        } else if (condition === 'ai') {
+          hint = '本阶段材料将提供给 AI 助手，后续阶段可点击左上角按钮向助手查询。请认真阅读并尽量记住每条信息的具体细节。';
+        }
+        return `
         <div class="card">
           <h2 >第二阶段：学习 List A</h2>
           <p style="line-height:1.8;margin-bottom:16px">
             接下来您将看到 <strong>20 条知识性陈述</strong>，每条显示 <strong>5 秒</strong>。<br>
-            请认真阅读并尽量记住每条信息的具体细节。
+            ${hint}
           </p>
           <p style="color:#86868b;font-size:0.9rem">按"开始"后将自动翻页。</p>
-        </div>`,
+        </div>`;
+      },
       choices: ['开始学习']
     });
 
@@ -358,11 +426,35 @@
           <div class="card" style="text-align:center">
             <h2 >正在保存到云端</h2>
             <div style="background:rgba(0,0,0,0.06);border-radius:99px;height:8px;overflow:hidden;margin:18px 0">
-              <div style="width:100%;height:100%;background:#0071e3"></div>
+              <div id="cloud-progress-fill" style="width:0%;height:100%;background:#0071e3;transition:width 1.8s ease"></div>
             </div>
-            <p style="color:#86868b">保存完成。您可以随时点击左上角的按钮查看已保存的内容。</p>
+            <p id="cloud-progress-text" style="color:#86868b">正在上传中，请稍候...</p>
           </div>`,
         choices: ['继续'],
+        on_load: function() {
+          const btn = document.querySelector('.jspsych-btn');
+          const fill = document.getElementById('cloud-progress-fill');
+          const text = document.getElementById('cloud-progress-text');
+          if (btn) {
+            btn.disabled = true;
+            btn.style.opacity = '0.5';
+            btn.style.cursor = 'not-allowed';
+          }
+          // Trigger transition after paint
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              if (fill) fill.style.width = '100%';
+            });
+          });
+          setTimeout(() => {
+            if (text) text.textContent = '保存完成。您可以随时点击左上角的按钮查看已保存的内容。';
+            if (btn) {
+              btn.disabled = false;
+              btn.style.opacity = '1';
+              btn.style.cursor = 'pointer';
+            }
+          }, 1850);
+        },
         on_finish: function() {
           if (condition === 'cloud') {
             const btn = document.createElement('button');
@@ -370,6 +462,11 @@
             btn.textContent = 'listA';
             btn.style.cssText = 'position:fixed;top:14px;left:14px;z-index:9999;background:#fff;color:#0071e3;border:1px solid rgba(0,113,227,0.4);border-radius:8px;padding:6px 14px;font-size:0.85rem;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.1)';
             btn.addEventListener('click', function() {
+              if (!viewAccessEnabled) {
+                if (inListBLearning) blockedViewAttemptsListB += 1;
+                showHintToast('当前阶段该功能不可用。为保证学习时间一致性，List B 开始后不允许查看外部内容。');
+                return;
+              }
               if (testStarted) {
                 alert('文件已损毁，无法查看。');
               } else {
@@ -377,6 +474,8 @@
               }
             });
             document.body.appendChild(btn);
+            viewAccessEnabled = true;
+            updateAuxViewButtonState();
           }
         }
       }],
@@ -403,6 +502,11 @@
             btn.textContent = 'AI 助手';
             btn.style.cssText = 'position:fixed;top:14px;left:14px;z-index:9999;background:#fff;color:#0071e3;border:1px solid rgba(0,113,227,0.4);border-radius:8px;padding:6px 14px;font-size:0.85rem;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.1)';
             btn.addEventListener('click', function() {
+              if (!viewAccessEnabled) {
+                if (inListBLearning) blockedViewAttemptsListB += 1;
+                showHintToast('当前阶段该功能不可用。为保证学习时间一致性，List B 开始后不允许访问 AI 助手。');
+                return;
+              }
               if (testStarted) {
                 alert('AI 助手已断开连接，无法访问。');
               } else {
@@ -410,6 +514,8 @@
               }
             });
             document.body.appendChild(btn);
+            viewAccessEnabled = true;
+            updateAuxViewButtonState();
           }
         }
       }],
@@ -419,16 +525,30 @@
     // ── 10. List B 学习阶段说明 ─────────────────────────────────────────────
     timeline.push({
       type: jsPsychHtmlButtonResponse,
-      stimulus: `
+      stimulus: function() {
+        let hint = '请认真阅读并尽量记住每条信息的具体细节。';
+        if (condition === 'cloud') {
+          hint = '本阶段材料不会被云端保存，且不会以任何形式再次呈现。请仅依赖自己的记忆完成学习。';
+        } else if (condition === 'ai') {
+          hint = '本阶段材料不会提供给 AI 助手，且不会以任何形式再次呈现。请仅依赖自己的记忆完成学习。';
+        }
+        return `
         <div class="card">
           <h2 >第三阶段：学习 List B</h2>
           <p style="line-height:1.8;margin-bottom:16px">
             接下来您将看到 <strong>20 条新的知识性陈述</strong>，每条显示 <strong>5 秒</strong>。<br>
-            请认真阅读并尽量记住每条信息的具体细节。
+            ${hint}
           </p>
           <p style="color:#86868b;font-size:0.9rem">按"开始"后将自动翻页。</p>
-        </div>`,
-      choices: ['开始学习']
+        </div>`;
+      },
+      choices: ['开始学习'],
+      on_finish: function() {
+        // List B 开始后禁用外部查看入口，避免占用学习时间
+        inListBLearning = true;
+        viewAccessEnabled = false;
+        updateAuxViewButtonState();
+      }
     });
 
     // ── 11. List B 学习（5000ms/题）─────────────────────────────────────────
@@ -454,7 +574,7 @@
       type: jsPsychHtmlButtonResponse,
       stimulus: `
         <div class="card">
-          <h2 >短暂休息任务</h2>
+          <h2 >计算界面体验</h2>
           <p style="line-height:1.8;margin-bottom:16px">
             接下来将进行 <strong>2 分钟</strong>的数学选择题，请尽量快速准确作答。
           </p>
@@ -462,12 +582,16 @@
         </div>`,
       choices: ['开始'],
       on_finish: function() {
+        // List B 学习结束后，在计算题阶段恢复可查看
+        inListBLearning = false;
+        viewAccessEnabled = true;
+        updateAuxViewButtonState();
         distractorStart = performance.now();
         mathCorrect = 0;
       }
     });
 
-    // ── 13. 干扰任务（5分钟数学题）─────────────────────────────────────────
+    // ── 13. 干扰任务（2分钟数学题）─────────────────────────────────────────
     const distractorLoop = {
       timeline: [{
         type: jsPsychHtmlButtonResponse,
@@ -507,7 +631,7 @@
       type: jsPsychHtmlButtonResponse,
       stimulus: `
         <div class="card" style="text-align:center">
-          <h2 >突击测试</h2>
+          <h2 >记忆测试</h2>
           <p style="line-height:1.8">接下来将对刚才学习的内容进行测验，每题四个选项。</p>
         </div>`,
       choices: ['开始测试'],
@@ -609,21 +733,25 @@
 
     // ── 16. 操纵核实问卷 ────────────────────────────────────────────────────
     timeline.push({
-      timeline: [{
-        type: jsPsychHtmlButtonResponse,
-        stimulus: `
+      type: jsPsychHtmlButtonResponse,
+      stimulus: `
         <div class="card">
           <h2 >使用体验反馈</h2>
           <div style="margin-bottom:18px">
-            <label style="display:block;margin-bottom:8px">1. 您是否相信刚才的学习内容已被成功保存？</label>
-            <label style="margin-right:20px"><input type="radio" name="manip_check" value="1"> 相信</label>
-            <label><input type="radio" name="manip_check" value="0"> 不相信</label>
+            <label style="display:block;margin-bottom:8px">1. 在学习 List A 时，您是否相信这些材料之后可以再次查看或调用？</label>
+            <label style="margin-right:20px"><input type="radio" name="manip_a_represent" value="1"> 可以</label>
+            <label><input type="radio" name="manip_a_represent" value="0"> 不可以</label>
           </div>
           <div style="margin-bottom:18px">
-            <label style="display:block;margin-bottom:8px">2. 您对这一保存过程的信任程度：</label>
+            <label style="display:block;margin-bottom:8px">2. 在学习 List B 时，您认为这些材料之后会再次呈现吗？</label>
+            <label style="margin-right:20px"><input type="radio" name="manip_b_represent" value="1"> 会</label>
+            <label><input type="radio" name="manip_b_represent" value="0"> 不会</label>
+          </div>
+          <div style="margin-bottom:18px">
+            <label style="display:block;margin-bottom:8px">3. 您对实验中“是否可再次呈现”提示语的可信度评价：</label>
             <div class="likert-row">
               <span class="scale-label">很低</span>
-              ${[1,2,3,4,5,6,7].map(v => `<label><input type="radio" name="manip_trust" value="${v}"> ${v}</label>`).join('')}
+              ${[1,2,3,4,5,6,7].map(v => `<label><input type="radio" name="manip_instruction_trust" value="${v}"> ${v}</label>`).join('')}
               <span class="scale-label">很高</span>
             </div>
           </div>
@@ -634,19 +762,19 @@
       on_load: function() {
         const btn = document.querySelector('.jspsych-btn');
         btn.addEventListener('click', function(e) {
-          const check = document.querySelector('input[name="manip_check"]:checked');
-          const trust = document.querySelector('input[name="manip_trust"]:checked');
-          if (!check || !trust) {
+          const listARepresent = document.querySelector('input[name="manip_a_represent"]:checked');
+          const listBRepresent = document.querySelector('input[name="manip_b_represent"]:checked');
+          const instructionTrust = document.querySelector('input[name="manip_instruction_trust"]:checked');
+          if (!listARepresent || !listBRepresent || !instructionTrust) {
             e.stopImmediatePropagation();
             document.getElementById('manip-error').style.display = 'block';
             return;
           }
-          questionnaireData.manip_check_bool = parseInt(check.value);
-          questionnaireData.manip_trust = parseInt(trust.value);
+          questionnaireData.manip_a_represent = parseInt(listARepresent.value);
+          questionnaireData.manip_b_represent = parseInt(listBRepresent.value);
+          questionnaireData.manip_instruction_trust = parseInt(instructionTrust.value);
         }, true);
       }
-    }],
-      conditional_function: function() { return condition === 'cloud' || condition === 'ai'; }
     });
 
     // ── 17. 元认知问卷 ──────────────────────────────────────────────────────
@@ -675,8 +803,11 @@
           </div>
           <div style="margin-bottom:18px">
             <label style="display:block;margin-bottom:8px">4. 您对本实验实际目的的猜测与知情同意书中的说明是否一致？</label>
-            <label style="margin-right:20px"><input type="radio" name="suspect" value="1"> 怀疑过</label>
-            <label><input type="radio" name="suspect" value="0"> 没有</label>
+            <div class="likert-row">
+              <span class="scale-label">完全不一致</span>
+              ${[1,2,3,4,5,6,7].map(v => `<label><input type="radio" name="suspect" value="${v}"> ${v}</label>`).join('')}
+              <span class="scale-label">完全一致</span>
+            </div>
           </div>
           <p id="meta-error" style="color:#ff3b30;display:none;margin-top:8px">请完成所有题目后继续。</p>
         </div>`,
@@ -698,8 +829,15 @@
           questionnaireData.metacog_pred_b = parseInt(predB);
           questionnaireData.cognitive_dep = parseInt(dep.value);
           questionnaireData.suspected_deception = parseInt(suspect.value);
-          apiQuestionnaire(questionnaireData);
+          questionnaireData.blocked_view_attempts_listb = blockedViewAttemptsListB;
         }, true);
+      },
+      on_finish: function() {
+        // 等待问卷写入，避免被试快速结束导致问卷丢失
+        jsPsych.pauseExperiment();
+        apiQuestionnaire(questionnaireData)
+          .catch(() => {})
+          .finally(() => jsPsych.resumeExperiment());
       }
     });
 

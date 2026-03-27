@@ -33,26 +33,24 @@
     }
 
     if (localStorage.getItem('listA_test_started') === '1') {
-      document.addEventListener('DOMContentLoaded', showCorrupted);
+      showCorrupted();
     } else {
-      document.addEventListener('DOMContentLoaded', function() {
-        document.getElementById('save-time').textContent =
-          '保存时间：' + new Date().toLocaleString('zh-CN');
-        fetch('stimuli/listA.json')
-          .then(r => r.json())
-          .then(data => {
-            document.getElementById('list-container').innerHTML = data.map((item, i) =>
-              `<div class="subpage-item">
-                <div class="sp-num">${i + 1}</div>
-                <div class="sp-text">${item.statement}</div>
-              </div>`
-            ).join('');
-          })
-          .catch(() => {
-            document.getElementById('list-container').innerHTML =
-              '<p style="color:#ff3b30">内容加载失败。</p>';
-          });
-      });
+      document.getElementById('save-time').textContent =
+        '保存时间：' + new Date().toLocaleString('zh-CN');
+      fetch('stimuli/listA.json')
+        .then(r => r.json())
+        .then(data => {
+          document.getElementById('list-container').innerHTML = data.map((item, i) =>
+            `<div class="subpage-item">
+              <div class="sp-num">${i + 1}</div>
+              <div class="sp-text">${item.statement}</div>
+            </div>`
+          ).join('');
+        })
+        .catch(() => {
+          document.getElementById('list-container').innerHTML =
+            '<p style="color:#ff3b30">内容加载失败。</p>';
+        });
     }
 
     window.addEventListener('storage', function(e) {
