@@ -16,7 +16,7 @@
   <div class="subpage-disconnected-banner" id="disconnected-banner">连接已断开，无法继续使用。</div>
 
   <div class="chat-area" id="chat-area">
-    <div class="msg ai">您好！我已存储您本次学习的全部内容。您可以问我「我学了什么」，或直接询问某个具体知识点。</div>
+    <div class="msg ai">您好！我已存储您本次listA学习的全部内容。您可以问我「我学了什么」，或直接询问某个具体知识点。</div>
   </div>
 
   <div class="chat-input-area">
@@ -71,6 +71,48 @@
       ['皮肤细胞','脱落','27天']
     ];
 
+    /** 主题词扩展：用户用模糊说法提问时，并入与 List A 条目相关的检索词 */
+    const TOPIC_RULES = [
+      { re: /成年人|成人|人类(?!文明)|人体|身上|皮肤|肺部|肺/, add: ['成年人','成年','肺','肺部','皮肤','细胞','指甲','脱落','喷嚏','人体','37万亿','网球场','30000','40000','27天','3.5毫米','皮肤细胞'] },
+      { re: /动物|昆虫|鱼|鸟|猫|蜜蜂|蓝鲸|鸵鸟|蜗牛|大象|蟑螂|海马|金枪鱼|雪豹|哺乳|甲壳/, add: ['蜜蜂','猫','蓝鲸','鸵鸟','大象','蜗牛','蟑螂','金枪鱼','海马','雪豹'] },
+      { re: /天文|月球|月亮|土星|星球|太空|宇宙/, add: ['月球','土星','密度','0.69','1.3秒'] },
+      { re: /植物|竹子/, add: ['竹子','91厘米','生长'] },
+      { re: /贝加尔|淡水湖|最深|湖/, add: ['贝加尔','1642','淡水'] },
+      { re: /速度|快|慢|公里|每秒|游速/, add: ['200次','75公里','160公里','1.3秒','游速','每秒'] }
+    ];
+
+    const TOP_K = 3;
+    const MIN_SCORE_TO_REPLY = 1;
+
+    function normalize(s) {
+      return String(s).replace(/[\s\u3000]+/g, '').replace(/[，。！？、；：""''（）【】]/g, '');
+    }
+
+    function buildSearchBlob(raw) {
+      const t = normalize(raw);
+      let blob = t;
+      for (const { re, add } of TOPIC_RULES) {
+        if (re.test(raw)) blob += add.join('');
+      }
+      return blob;
+    }
+
+    function scoreItem(i, searchBlob, rawTrimmed) {
+      let score = 0;
+      for (const kw of KEYWORDS[i]) {
+        if (searchBlob.includes(kw)) score += 2;
+      }
+      const sent = STORED[i];
+      if (rawTrimmed.length >= 2) {
+        const n = normalize(rawTrimmed);
+        for (let j = 0; j + 2 <= n.length; j++) {
+          const bi = n.slice(j, j + 2);
+          if (sent.includes(bi)) score += 0.4;
+        }
+      }
+      return score;
+    }
+
     let disconnected = false;
 
     function setDisconnected() {
@@ -94,20 +136,29 @@
     function findResponse(input) {
       const text = input.trim();
       if (/你是谁|什么模型|什么AI|真的AI|假的|能上网|联网|天气|新闻|时间|日期|你叫什么/.test(text)) {
-        return '我是本次实验专属的学习助手，仅用于存储和回顾您的学习内容，不具备其他功能。';
+        return '我是本次实验专属的学习助手，仅用于存储和回顾您的listA学习内容，不具备其他功能。';
       }
       if (/学了什么|记录了什么|存了什么|保存了什么|内容是什么|列出|全部|所有/.test(text)) {
         return '以下是我为您存储的全部学习内容：\n\n' +
           STORED.map((s, i) => `${i + 1}. ${s}`).join('\n');
       }
-      let bestIdx = -1, bestScore = 0;
-      for (let i = 0; i < KEYWORDS.length; i++) {
-        const score = KEYWORDS[i].filter(kw => text.includes(kw)).length;
-        if (score > bestScore) { bestScore = score; bestIdx = i; }
-      }
-      if (bestScore > 0) return `根据我存储的内容：${STORED[bestIdx]}`;
       if (/几条|多少条|多少个|几个/.test(text)) return `我共为您存储了 ${STORED.length} 条学习内容。`;
-      return '我目前只存储了您本次学习的内容。如需查看，可以问我「我学了什么」或询问具体的知识点。';
+
+      const searchBlob = buildSearchBlob(text);
+      const ranked = [];
+      for (let i = 0; i < STORED.length; i++) {
+        const sc = scoreItem(i, searchBlob, text);
+        if (sc > 0) ranked.push({ i, sc });
+      }
+      ranked.sort((a, b) => b.sc - a.sc);
+      const picks = ranked.filter(r => r.sc >= MIN_SCORE_TO_REPLY).slice(0, TOP_K);
+
+      if (picks.length > 0) {
+        const lines = picks.map((r, idx) => `${idx + 1}. ${STORED[r.i]}`);
+        return '根据您的问题，我在已存储的学习内容中找到以下相关条目：\n\n' + lines.join('\n\n');
+      }
+
+      return '我只能根据您本次listA学习过的材料来回答，暂时没匹配到特别相关的句子。您可以换个说法（例如「和人体有关的」「和动物有关的」），或直接说具体名词；也可以问我「我学了什么」查看完整列表。';
     }
 
     function appendMsg(text, role) {
