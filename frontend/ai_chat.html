@@ -83,6 +83,31 @@
 
     const TOP_K = 3;
     const MIN_SCORE_TO_REPLY = 1;
+    const RELATIVE_CUTOFF = 0.72;
+
+    // 实体词强命中：命中后优先返回单条，降低“海马->多条弱相关”的穿帮风险
+    const ENTITY_HINTS = [
+      { i: 0, terms: ['蜜蜂'] },
+      { i: 1, terms: ['肺部', '肺', '70平方米', '网球场'] },
+      { i: 2, terms: ['月球', '1.3秒'] },
+      { i: 3, terms: ['贝加尔', '淡水湖', '1642'] },
+      { i: 4, terms: ['蟑螂', '9天'] },
+      { i: 5, terms: ['37万亿', '细胞'] },
+      { i: 6, terms: ['蜗牛', '齿舌', '14000'] },
+      { i: 7, terms: ['猫', '耳朵', '32块'] },
+      { i: 8, terms: ['蓝鲸', '180公斤'] },
+      { i: 9, terms: ['鸵鸟', '5厘米'] },
+      { i: 10, terms: ['土星', '0.69', '密度'] },
+      { i: 11, terms: ['大象', '妊娠', '22个月'] },
+      { i: 12, terms: ['金枪鱼', '75公里'] },
+      { i: 13, terms: ['竹子', '91厘米'] },
+      { i: 14, terms: ['870万', '物种'] },
+      { i: 15, terms: ['喷嚏', '160公里'] },
+      { i: 16, terms: ['指甲', '3.5毫米'] },
+      { i: 17, terms: ['海马', '3000只'] },
+      { i: 18, terms: ['雪豹', '80至105'] },
+      { i: 19, terms: ['皮肤细胞', '30000', '40000', '27天'] }
+    ];
 
     function normalize(s) {
       return String(s).replace(/[\s\u3000]+/g, '').replace(/[，。！？、；：""''（）【】]/g, '');
@@ -114,6 +139,7 @@
     }
 
     let disconnected = false;
+    let lastMatchedIndices = [];
 
     function setDisconnected() {
       disconnected = true;
@@ -135,6 +161,7 @@
 
     function findResponse(input) {
       const text = input.trim();
+      const nText = normalize(text);
       if (/你是谁|什么模型|什么AI|真的AI|假的|能上网|联网|天气|新闻|时间|日期|你叫什么/.test(text)) {
         return '我是本次实验专属的学习助手，仅用于存储和回顾您的listA学习内容，不具备其他功能。';
       }
@@ -144,6 +171,19 @@
       }
       if (/几条|多少条|多少个|几个/.test(text)) return `我共为您存储了 ${STORED.length} 条学习内容。`;
 
+      // 承接式追问：对“为什么/怎么会”等问题复用上一轮命中条目，减少直接兜底
+      if (/为什么|怎么会|怎么|依据|原理|解释一下|展开说说/.test(text) && lastMatchedIndices.length > 0) {
+        const idx = lastMatchedIndices[0];
+        return `这是基于我已存储内容给出的说明：${STORED[idx]}\n\n如果您想更精确，我可以继续按主题筛选（例如“只说和动物有关的”）。`;
+      }
+
+      // 实体词强命中：若命中明确实体，则优先返回单条
+      const exactEntityHits = ENTITY_HINTS.filter(e => e.terms.some(t => nText.includes(normalize(t))));
+      if (exactEntityHits.length === 1) {
+        lastMatchedIndices = [exactEntityHits[0].i];
+        return `根据我存储的内容：${STORED[exactEntityHits[0].i]}`;
+      }
+
       const searchBlob = buildSearchBlob(text);
       const ranked = [];
       for (let i = 0; i < STORED.length; i++) {
@@ -151,9 +191,12 @@
         if (sc > 0) ranked.push({ i, sc });
       }
       ranked.sort((a, b) => b.sc - a.sc);
-      const picks = ranked.filter(r => r.sc >= MIN_SCORE_TO_REPLY).slice(0, TOP_K);
+      const bestScore = ranked.length > 0 ? ranked[0].sc : 0;
+      const cutoff = Math.max(MIN_SCORE_TO_REPLY, bestScore * RELATIVE_CUTOFF);
+      const picks = ranked.filter(r => r.sc >= cutoff).slice(0, TOP_K);
 
       if (picks.length > 0) {
+        lastMatchedIndices = picks.map(p => p.i);
         const lines = picks.map((r, idx) => `${idx + 1}. ${STORED[r.i]}`);
         return '根据您的问题，我在已存储的学习内容中找到以下相关条目：\n\n' + lines.join('\n\n');
       }
