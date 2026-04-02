@@ -109,6 +109,16 @@
       { i: 19, terms: ['皮肤细胞', '30000', '40000', '27天'] }
     ];
 
+    // 主题白名单路由：先限制候选池，再做排序，降低跨类误召回
+    const TOPIC_POOLS = [
+      { re: /鱼类|和鱼有关|关于鱼|^鱼$/, indices: [12, 17] }, // 金枪鱼、海马
+      { re: /昆虫|虫类|节肢|^虫$/, indices: [0, 4] }, // 蜜蜂、蟑螂
+      { re: /鸟类|鸟|禽类/, indices: [9] }, // 鸵鸟
+      { re: /哺乳|哺乳动物|大型动物|陆地动物/, indices: [7, 8, 11, 18] }, // 猫、蓝鲸、大象、雪豹
+      { re: /天文|宇宙|星球|太空|月球|土星/, indices: [2, 10] },
+      { re: /人体|人类|成年人|皮肤|肺|细胞|指甲|喷嚏/, indices: [1, 5, 15, 16, 19] }
+    ];
+
     function normalize(s) {
       return String(s).replace(/[\s\u3000]+/g, '').replace(/[，。！？、；：""''（）【】]/g, '');
     }
@@ -171,6 +181,16 @@
       }
       if (/几条|多少条|多少个|几个/.test(text)) return `我共为您存储了 ${STORED.length} 条学习内容。`;
 
+      // 类别词快速分流：避免宽泛主题把无关条目召回
+      for (const pool of TOPIC_POOLS) {
+        if (pool.re.test(text)) {
+          const picks = pool.indices.slice(0, 2);
+          lastMatchedIndices = picks;
+          return '根据我存储的内容，相关条目有：\n\n' +
+            picks.map((i, idx) => `${idx + 1}. ${STORED[i]}`).join('\n\n');
+        }
+      }
+
       // 承接式追问：对“为什么/怎么会”等问题复用上一轮命中条目，减少直接兜底
       if (/为什么|怎么会|怎么|依据|原理|解释一下|展开说说/.test(text) && lastMatchedIndices.length > 0) {
         const idx = lastMatchedIndices[0];
@@ -193,7 +213,12 @@
       ranked.sort((a, b) => b.sc - a.sc);
       const bestScore = ranked.length > 0 ? ranked[0].sc : 0;
       const cutoff = Math.max(MIN_SCORE_TO_REPLY, bestScore * RELATIVE_CUTOFF);
-      const picks = ranked.filter(r => r.sc >= cutoff).slice(0, TOP_K);
+      const filtered = ranked.filter(r => r.sc >= cutoff);
+      // 动态Top-K：高置信度实体问法返回1条，中等返回2条，否则最多3条
+      let dynamicK = TOP_K;
+      if (exactEntityHits.length >= 1 || bestScore >= 8) dynamicK = 1;
+      else if (bestScore >= 4) dynamicK = 2;
+      const picks = filtered.slice(0, dynamicK);
 
       if (picks.length > 0) {
         lastMatchedIndices = picks.map(p => p.i);
@@ -201,7 +226,7 @@
         return '根据您的问题，我在已存储的学习内容中找到以下相关条目：\n\n' + lines.join('\n\n');
       }
 
-      return '我只能根据您本次listA学习过的材料来回答，暂时没匹配到特别相关的句子。您可以换个说法（例如「和人体有关的」「和动物有关的」），或直接说具体名词；也可以问我「我学了什么」查看完整列表。';
+      return '我暂时没匹配到足够明确的条目。您可以再具体一点，例如：\n1) 说类别（鱼类/昆虫/人体/天文）\n2) 说关键词（如“海马”“土星”“肺部”）\n也可以直接问我「我学了什么」查看完整列表。';
     }
 
     function appendMsg(text, role) {
