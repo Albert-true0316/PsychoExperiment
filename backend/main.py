@@ -7,8 +7,8 @@ import sqlite3
 import random
 
 from .database import init_db, get_conn
-from .models import ParticipantIn, AssignOut, SubmitData, QuestionnaireData
-from .export import generate_csv
+from .models import ParticipantIn, AssignOut, SubmitData, QuestionnaireData, DualTaskSubmit
+from .export import generate_csv, generate_dual_task_csv
 
 app = FastAPI(title="认知卸载实验 API", docs_url="/api/docs", redoc_url="/api/redoc", openapi_url="/api/openapi.json")
 
@@ -129,6 +129,33 @@ def submit_questionnaire(data: QuestionnaireData):
     return {"status": "ok"}
 
 
+@app.post("/api/dual_task")
+def submit_dual_task(data: DualTaskSubmit):
+    """批量写入双任务逐事件数据。"""
+    conn = get_conn()
+    cur = conn.cursor()
+
+    cur.execute("SELECT id FROM participants WHERE id=?", (data.participant_id,))
+    if not cur.fetchone():
+        conn.close()
+        raise HTTPException(status_code=404, detail="participant_id 不存在")
+
+    cur.executemany(
+        "INSERT INTO dual_task_events "
+        "(participant_id, phase, item_index, tone_type, correct_key, "
+        " key_pressed, rt_ms, is_correct, onset_ms, had_tone) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [
+            (data.participant_id, e.phase, e.item_index, e.tone_type, e.correct_key,
+             e.key_pressed, e.rt_ms, e.is_correct, e.onset_ms, e.had_tone)
+            for e in data.events
+        ]
+    )
+    conn.commit()
+    conn.close()
+    return {"status": "ok", "saved": len(data.events)}
+
+
 @app.get("/api/export", response_class=PlainTextResponse)
 def export():
     """导出全部被试数据为CSV（研究者使用）。"""
@@ -139,6 +166,19 @@ def export():
         content=csv_text,
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=experiment_data.csv"}
+    )
+
+
+@app.get("/api/export/dual_task", response_class=PlainTextResponse)
+def export_dual_task():
+    """导出双任务逐事件长表 CSV。"""
+    csv_text = generate_dual_task_csv()
+    if not csv_text:
+        return PlainTextResponse("暂无数据", status_code=204)
+    return PlainTextResponse(
+        content=csv_text,
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=dual_task_events.csv"}
     )
 
 

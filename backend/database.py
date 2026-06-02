@@ -2,7 +2,7 @@ import sqlite3
 import os
 from pathlib import Path
 
-DB_PATH = Path(os.environ.get('DB_PATH', str(Path(__file__).parent.parent / 'data' / 'participants.db')))
+DB_PATH = Path(os.environ.get('DB_PATH', str(Path(__file__).parent.parent / 'data' / 'participants_exp2.db')))
 
 
 def get_conn():
@@ -52,6 +52,22 @@ def init_db():
         suspected_deception INTEGER,     -- 事后是否怀疑过欺骗 1/0
         blocked_view_attempts_listb INTEGER DEFAULT 0 -- List B 阶段被拦截次数
     );
+
+    CREATE TABLE IF NOT EXISTS dual_task_events (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        participant_id  TEXT NOT NULL REFERENCES participants(id),
+        phase           TEXT NOT NULL,      -- 'A' | 'B' | 'practice'
+        item_index      INTEGER NOT NULL,
+        tone_type       TEXT,               -- 'high' | 'low' | NULL
+        correct_key     TEXT,               -- 'F' | 'J' | NULL
+        key_pressed     TEXT,
+        rt_ms           INTEGER,
+        is_correct      INTEGER,            -- 1 | 0
+        onset_ms        INTEGER,
+        had_tone        INTEGER DEFAULT 1,
+        created_at      TEXT DEFAULT (datetime('now','localtime'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_dual_task_pid ON dual_task_events(participant_id);
     """)
 
     # 兼容旧数据库：增量补齐新字段

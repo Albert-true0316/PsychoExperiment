@@ -16,10 +16,15 @@
     window.initJsPsych = initJsPsych;
     window.jsPsychHtmlButtonResponse = htmlButton;
     window.jsPsychHtmlKeyboardResponse = htmlKeyboard;
-    // Load experiment.js only after globals are ready
-    const s = document.createElement('script');
-    s.src = 'experiment.js';
-    document.body.appendChild(s);
+    // Load dual task module, then experiment.js
+    const dual = document.createElement('script');
+    dual.src = 'dual_task.js';
+    dual.onload = function () {
+      const s = document.createElement('script');
+      s.src = 'experiment.js';
+      document.body.appendChild(s);
+    };
+    document.body.appendChild(dual);
   </script>
 
   <!-- 样式 -->

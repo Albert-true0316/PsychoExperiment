@@ -58,3 +58,40 @@ def generate_csv() -> str:
     writer.writeheader()
     writer.writerows([dict(r) for r in rows])
     return output.getvalue()
+
+
+def generate_dual_task_csv() -> str:
+    """生成双任务逐事件长表 CSV，每行一个 trial。"""
+    conn = get_conn()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT
+            d.participant_id,
+            p.condition,
+            d.phase,
+            d.item_index,
+            d.tone_type,
+            d.correct_key,
+            d.key_pressed,
+            d.rt_ms,
+            d.is_correct,
+            d.onset_ms,
+            d.had_tone,
+            d.created_at
+        FROM dual_task_events d
+        JOIN participants p ON p.id = d.participant_id
+        ORDER BY d.participant_id, d.phase, d.item_index, d.id
+    """)
+
+    rows = cur.fetchall()
+    conn.close()
+
+    if not rows:
+        return ""
+
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=rows[0].keys())
+    writer.writeheader()
+    writer.writerows([dict(r) for r in rows])
+    return output.getvalue()

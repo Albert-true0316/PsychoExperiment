@@ -16,7 +16,17 @@
   let viewAccessEnabled = false;
   let inListBLearning = false;
   let blockedViewAttemptsListB = 0;
+  let allDualTaskEvents = [];
   localStorage.removeItem('listA_test_started');
+  localStorage.removeItem('listA_aux_opened');
+
+  const AUX_BTN_STYLE = [
+    'position:fixed', 'top:10px', 'left:10px', 'z-index:9999',
+    'background:#fff', 'color:#0071e3',
+    'border:2px solid rgba(0,113,227,0.55)', 'border-radius:10px',
+    'padding:10px 18px', 'font-size:0.95rem', 'font-weight:600',
+    'cursor:pointer', 'box-shadow:0 4px 14px rgba(0,0,0,0.12)'
+  ].join(';');
 
   // ─── 工具函数 ────────────────────────────────────────────────────────────────
   function shuffle(arr) {
@@ -127,18 +137,143 @@
     });
   }
 
+  async function apiDualTask(events) {
+    if (!events.length) return;
+    await fetch('/api/dual_task', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        participant_id: participantId,
+        events
+      })
+    }).catch(() => {});
+  }
+
+  function recordDualTaskEvent(record) {
+    allDualTaskEvents.push(record);
+  }
+
+  function submitDualTaskPhase(phase) {
+    const events = allDualTaskEvents.filter(e => e.phase === phase);
+    if (!events.length) return Promise.resolve();
+    return apiDualTask(events);
+  }
+
   function updateAuxViewButtonState() {
     const btn = document.getElementById('cloud-view-btn') || document.getElementById('ai-view-btn');
     if (!btn) return;
     if (viewAccessEnabled) {
       btn.style.opacity = '1';
       btn.style.cursor = 'pointer';
-      btn.style.borderColor = 'rgba(0,113,227,0.4)';
+      btn.style.borderColor = 'rgba(0,113,227,0.55)';
     } else {
-      btn.style.opacity = '0.55';
+      btn.style.opacity = '0.5';
       btn.style.cursor = 'not-allowed';
       btn.style.borderColor = 'rgba(0,113,227,0.22)';
     }
+  }
+
+  function openAuxView(url, blockedMsg) {
+    if (!viewAccessEnabled) {
+      if (inListBLearning) blockedViewAttemptsListB += 1;
+      showHintToast(blockedMsg);
+      return;
+    }
+    if (testStarted) {
+      alert(condition === 'cloud' ? '文件已损毁，无法查看。' : 'AI 助手已断开连接，无法访问。');
+    } else {
+      window.open(url, '_blank');
+    }
+  }
+
+  function createAuxViewButton(kind) {
+    const btnId = kind === 'cloud' ? 'cloud-view-btn' : 'ai-view-btn';
+    const existing = document.getElementById(btnId);
+    if (existing) existing.remove();
+
+    const btn = document.createElement('button');
+    btn.id = btnId;
+    btn.style.cssText = AUX_BTN_STYLE;
+    if (kind === 'cloud') {
+      btn.textContent = '云端 · List A';
+      btn.addEventListener('click', function() {
+        openAuxView(
+          'listA_cloud.html',
+          '当前阶段该功能不可用。List B 学习期间请专注阅读，稍后可再次使用。'
+        );
+      });
+    } else {
+      btn.textContent = 'AI 学习助手';
+      btn.addEventListener('click', function() {
+        openAuxView(
+          'ai_chat.html',
+          '当前阶段该功能不可用。List B 学习期间请专注阅读，稍后可再次使用。'
+        );
+      });
+    }
+    document.body.appendChild(btn);
+    viewAccessEnabled = true;
+    updateAuxViewButtonState();
+  }
+
+  function buildAuxFamiliarizationTrial() {
+    return {
+      type: jsPsychHtmlButtonResponse,
+      stimulus: function() {
+        const toolLabel = condition === 'cloud' ? '「云端 · List A」' : '「AI 学习助手」';
+        const actionHint = condition === 'cloud'
+          ? '打开后浏览一下已保存的内容即可'
+          : '打开后随便问一个问题或浏览对话界面即可';
+        return `
+          <div class="card">
+            <h2>熟悉外部工具</h2>
+            <p style="line-height:1.8;margin-bottom:16px">
+              List A 的内容已${condition === 'cloud' ? '保存至云端' : '提供给 AI 助手'}。这是本次界面体验的一部分，<strong>请在需要时像日常使用软件一样使用它</strong>，无需刻意回避。
+            </p>
+            <p style="line-height:1.8;margin-bottom:16px">
+              请先点击屏幕左上角的 ${toolLabel} 按钮，${actionHint}。
+            </p>
+            <p style="color:#86868b;font-size:0.9rem">
+              确认已成功打开后，再点击下方按钮继续。后续内容问答阶段需独立作答，届时工具将不可用。
+            </p>
+          </div>`;
+      },
+      choices: ['我已打开，继续'],
+      on_load: function() {
+        let pollTimer = null;
+        const continueBtn = document.querySelector('#jspsych-content .jspsych-btn');
+        const host = document.getElementById('jspsych-content');
+
+        function syncContinueState() {
+          const opened = localStorage.getItem('listA_aux_opened') === '1';
+          if (continueBtn) {
+            continueBtn.disabled = !opened;
+            continueBtn.style.opacity = opened ? '1' : '0.5';
+            continueBtn.style.cursor = opened ? 'pointer' : 'not-allowed';
+          }
+        }
+
+        syncContinueState();
+        pollTimer = setInterval(syncContinueState, 400);
+        if (host) host._auxFamPoll = pollTimer;
+
+        if (continueBtn) {
+          continueBtn.addEventListener('click', function(e) {
+            if (localStorage.getItem('listA_aux_opened') !== '1') {
+              e.stopImmediatePropagation();
+              showHintToast('请先点击左上角按钮，成功打开页面后再继续。');
+            }
+          }, true);
+        }
+      },
+      on_finish: function() {
+        const host = document.getElementById('jspsych-content');
+        if (host && host._auxFamPoll) {
+          clearInterval(host._auxFamPoll);
+          delete host._auxFamPoll;
+        }
+      }
+    };
   }
 
   function showHintToast(message) {
@@ -364,7 +499,10 @@
       });
     });
 
-    // ── 7. List A 学习阶段说明 ──────────────────────────────────────────────
+    // ── 7. 双任务练习（List A 之前）────────────────────────────────────────
+    timeline.push(DualTask.buildDualTaskPracticeBlock());
+
+    // ── 8. List A 学习阶段说明 ──────────────────────────────────────────────
     timeline.push({
       type: jsPsychHtmlButtonResponse,
       stimulus: function() {
@@ -381,31 +519,35 @@
             接下来您将看到 <strong>20 条知识性陈述</strong>，每条显示 <strong>5 秒</strong>。<br>
             ${hint}
           </p>
+          <p style="line-height:1.8;margin-bottom:16px">
+            ${DualTask.DUAL_TASK_INSTRUCTION}
+          </p>
+          <p style="line-height:1.8;margin-bottom:16px;color:#86868b;font-size:0.9rem">
+            请佩戴耳机、固定音量，并在安静环境中完成。
+          </p>
           <p style="color:#86868b;font-size:0.9rem">按"开始"后将自动翻页。</p>
         </div>`;
       },
       choices: ['开始学习']
     });
 
-    // ── 8. List A 学习（5000ms/题）──────────────────────────────────────────
-    listA.forEach((item, idx) => {
-      timeline.push({
-        type: jsPsychHtmlKeyboardResponse,
-        stimulus: `
-          <div style="text-align:center;margin-bottom:12px;color:#86868b;font-size:0.85rem">List A ${idx+1} / ${listA.length}</div>
-          <div class="stimulus-box">${item.statement}</div>`,
-        choices: 'NO_KEYS',
-        trial_duration: 5000
-      });
-      timeline.push({
-        type: jsPsychHtmlKeyboardResponse,
-        stimulus: '<div style="height:180px"></div>',
-        choices: 'NO_KEYS',
-        trial_duration: 500
-      });
+
+    // ── 9. List A 学习（5000ms/题 + 双任务）──────────────────────────────────
+    DualTask.appendDualTaskLearningTrials(timeline, listA, 'A', 'List A', recordDualTaskEvent);
+
+    timeline.push({
+      type: jsPsychHtmlKeyboardResponse,
+      stimulus: '',
+      choices: 'NO_KEYS',
+      trial_duration: 1,
+      on_finish: function() {
+        jsPsych.pauseExperiment();
+        submitDualTaskPhase('A').finally(() => jsPsych.resumeExperiment());
+      }
     });
 
-    // ── 9. 实验操纵（按组别呈现）───────────────────────────────────────────
+
+    // ── 10. 实验操纵（按组别呈现）───────────────────────────────────────────
     timeline.push({
       timeline: [{
         type: jsPsychHtmlButtonResponse,
@@ -447,7 +589,7 @@
             });
           });
           setTimeout(() => {
-            if (text) text.textContent = '保存完成。您可以随时点击左上角的按钮查看已保存的内容。';
+            if (text) text.textContent = '保存完成。接下来请先熟悉一下左上角的查看功能。';
             if (btn) {
               btn.disabled = false;
               btn.style.opacity = '1';
@@ -456,27 +598,7 @@
           }, 1850);
         },
         on_finish: function() {
-          if (condition === 'cloud') {
-            const btn = document.createElement('button');
-            btn.id = 'cloud-view-btn';
-            btn.textContent = 'listA';
-            btn.style.cssText = 'position:fixed;top:14px;left:14px;z-index:9999;background:#fff;color:#0071e3;border:1px solid rgba(0,113,227,0.4);border-radius:8px;padding:6px 14px;font-size:0.85rem;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.1)';
-            btn.addEventListener('click', function() {
-              if (!viewAccessEnabled) {
-                if (inListBLearning) blockedViewAttemptsListB += 1;
-                showHintToast('当前阶段该功能不可用。为保证学习时间一致性，List B 开始后不允许查看外部内容。');
-                return;
-              }
-              if (testStarted) {
-                alert('文件已损毁，无法查看。');
-              } else {
-                window.open('listA_cloud.html', '_blank');
-              }
-            });
-            document.body.appendChild(btn);
-            viewAccessEnabled = true;
-            updateAuxViewButtonState();
-          }
+          if (condition === 'cloud') createAuxViewButton('cloud');
         }
       }],
       conditional_function: function() { return condition === 'cloud'; }
@@ -492,37 +614,22 @@
               <div >AI：</div>
               <div>我已收到并保存您的学习内容，之后可随时调用。</div>
             </div>
-            <p style="color:#86868b">点击继续进入下一阶段。您可以随时点击左上角的按钮访问 AI 助手。</p>
+            <p style="color:#86868b">接下来请先熟悉一下左上角的 AI 助手功能。</p>
           </div>`,
         choices: ['继续'],
         on_finish: function() {
-          if (condition === 'ai') {
-            const btn = document.createElement('button');
-            btn.id = 'ai-view-btn';
-            btn.textContent = 'AI 助手';
-            btn.style.cssText = 'position:fixed;top:14px;left:14px;z-index:9999;background:#fff;color:#0071e3;border:1px solid rgba(0,113,227,0.4);border-radius:8px;padding:6px 14px;font-size:0.85rem;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.1)';
-            btn.addEventListener('click', function() {
-              if (!viewAccessEnabled) {
-                if (inListBLearning) blockedViewAttemptsListB += 1;
-                showHintToast('当前阶段该功能不可用。为保证学习时间一致性，List B 开始后不允许访问 AI 助手。');
-                return;
-              }
-              if (testStarted) {
-                alert('AI 助手已断开连接，无法访问。');
-              } else {
-                window.open('ai_chat.html', '_blank');
-              }
-            });
-            document.body.appendChild(btn);
-            viewAccessEnabled = true;
-            updateAuxViewButtonState();
-          }
+          if (condition === 'ai') createAuxViewButton('ai');
         }
       }],
       conditional_function: function() { return condition === 'ai'; }
     });
 
-    // ── 10. List B 学习阶段说明 ─────────────────────────────────────────────
+    timeline.push({
+      timeline: [buildAuxFamiliarizationTrial()],
+      conditional_function: function() { return condition === 'cloud' || condition === 'ai'; }
+    });
+
+    // ── 11. List B 学习阶段说明 ─────────────────────────────────────────────
     timeline.push({
       type: jsPsychHtmlButtonResponse,
       stimulus: function() {
@@ -539,6 +646,12 @@
             接下来您将看到 <strong>20 条新的知识性陈述</strong>，每条显示 <strong>5 秒</strong>。<br>
             ${hint}
           </p>
+          <p style="line-height:1.8;margin-bottom:16px">
+            ${DualTask.DUAL_TASK_INSTRUCTION}
+          </p>
+          <p style="line-height:1.8;margin-bottom:16px;color:#86868b;font-size:0.9rem">
+            请佩戴耳机、固定音量，并在安静环境中完成。
+          </p>
           <p style="color:#86868b;font-size:0.9rem">按"开始"后将自动翻页。</p>
         </div>`;
       },
@@ -551,35 +664,40 @@
       }
     });
 
-    // ── 11. List B 学习（5000ms/题）─────────────────────────────────────────
-    listB.forEach((item, idx) => {
-      timeline.push({
-        type: jsPsychHtmlKeyboardResponse,
-        stimulus: `
-          <div style="text-align:center;margin-bottom:12px;color:#86868b;font-size:0.85rem">List B ${idx+1} / ${listB.length}</div>
-          <div class="stimulus-box">${item.statement}</div>`,
-        choices: 'NO_KEYS',
-        trial_duration: 5000
-      });
-      timeline.push({
-        type: jsPsychHtmlKeyboardResponse,
-        stimulus: '<div style="height:180px"></div>',
-        choices: 'NO_KEYS',
-        trial_duration: 500
-      });
+    // ── 11. List B 学习（5000ms/题 + 双任务）─────────────────────────────────
+    DualTask.appendDualTaskLearningTrials(timeline, listB, 'B', 'List B', recordDualTaskEvent);
+
+    timeline.push({
+      type: jsPsychHtmlKeyboardResponse,
+      stimulus: '',
+      choices: 'NO_KEYS',
+      trial_duration: 1,
+      on_finish: function() {
+        jsPsych.pauseExperiment();
+        submitDualTaskPhase('B').finally(() => jsPsych.resumeExperiment());
+      }
     });
 
     // ── 12. 干扰任务说明 ────────────────────────────────────────────────────
     timeline.push({
       type: jsPsychHtmlButtonResponse,
-      stimulus: `
+      stimulus: function() {
+        let auxHint = '';
+        if (condition === 'cloud') {
+          auxHint = '<p style="line-height:1.8;margin-bottom:12px;color:#86868b;font-size:0.9rem">在等待期间，如需回顾 List A，可点击左上角「云端 · List A」。</p>';
+        } else if (condition === 'ai') {
+          auxHint = '<p style="line-height:1.8;margin-bottom:12px;color:#86868b;font-size:0.9rem">在等待期间，如需回顾 List A，可点击左上角「AI 学习助手」。</p>';
+        }
+        return `
         <div class="card">
           <h2 >计算界面体验</h2>
           <p style="line-height:1.8;margin-bottom:16px">
             接下来将进行 <strong>2 分钟</strong>的数学选择题，请尽量快速准确作答。
           </p>
+          ${auxHint}
           <p style="color:#86868b;font-size:0.9rem">点击开始后计时开始。</p>
-        </div>`,
+        </div>`;
+      },
       choices: ['开始'],
       on_finish: function() {
         // List B 学习结束后，在计算题阶段恢复可查看
@@ -626,15 +744,21 @@
     };
     timeline.push(distractorLoop);
 
-    // ── 14. 突击测试说明 ────────────────────────────────────────────────────
+    // ── 14. 内容问答说明 ────────────────────────────────────────────────────
     timeline.push({
       type: jsPsychHtmlButtonResponse,
-      stimulus: `
+      stimulus: function() {
+        const toolNote = (condition === 'cloud' || condition === 'ai')
+          ? '<p style="color:#86868b;font-size:0.9rem;margin-top:12px">请独立完成，不要使用外部工具或页面上的辅助按钮。</p>'
+          : '<p style="color:#86868b;font-size:0.9rem;margin-top:12px">请独立完成作答。</p>';
+        return `
         <div class="card" style="text-align:center">
-          <h2 >记忆测试</h2>
-          <p style="line-height:1.8">接下来将对刚才学习的内容进行测验，每题四个选项。</p>
-        </div>`,
-      choices: ['开始测试'],
+          <h2 >内容问答</h2>
+          <p style="line-height:1.8">接下来请根据<strong>您自己记住的内容</strong>独立作答，每题从四个选项中选择一项。</p>
+          ${toolNote}
+        </div>`;
+      },
+      choices: ['开始答题'],
       on_finish: function() { testStarted = true; localStorage.setItem('listA_test_started', '1'); }
     });
 
@@ -648,7 +772,7 @@
         timeline.push({
           type: jsPsychHtmlButtonResponse,
           stimulus: `
-            <div style="text-align:center;margin-bottom:12px;color:#86868b;font-size:0.85rem">${label} 测验 ${idx+1} / ${testList.length}</div>
+            <div style="text-align:center;margin-bottom:12px;color:#86868b;font-size:0.85rem">${label} 问答 ${idx+1} / ${testList.length}</div>
             <div class="stimulus-box" style="font-size:1.2rem;margin-bottom:8px">${item.test_question}</div>`,
           choices: shuffledOptions,
           button_html: '<button class="jspsych-btn">%choice%</button>',
@@ -678,7 +802,7 @@
       });
     }
 
-    // ── 15. List A + List B 测验 ────────────────────────────────────────────
+    // ── 15. List A + List B 问答 ────────────────────────────────────────────
     pushTest(listA, 'A', 'List A');
     pushTest(listB, 'B', 'List B');
 

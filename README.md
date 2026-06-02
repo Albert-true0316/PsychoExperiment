@@ -73,7 +73,10 @@ experiment/
 | 云储存组 (cloud) | 模拟文件保存进度条，可查看已保存内容 | List A 成绩下降 |
 | AI卸载组 (ai) | 伪AI对话界面，可查询已保存内容 | List A 成绩下降最多 |
 
-**实验流程（约45分钟）：**
+### 实验1（独立实验，主效应检验）
+实验1用于检验 LLM 参与条件下谷歌效应是否再现，以及其与操纵检查与元认知指标的关系。
+
+**实验1流程（约45分钟）：**
 1. 知情同意
 2. 筛查问卷（年龄、AI使用频率、记忆自评、是否了解相关研究）
 3. 基线记忆测试（10题，作为协变量）
@@ -85,6 +88,36 @@ experiment/
 9. 使用体验反馈问卷（操纵核实）
 10. 学习效果评估问卷（元认知）
 11. 事后知情（Debriefing）
+
+**实验1核心指标与字段映射：**
+- **组别变量**：`condition`
+- **客观记忆成绩**：`baseline_score`、`listA_score`、`listB_score`
+- **操纵检查**：`manip_a_represent`、`manip_b_represent`、`manip_instruction_trust`
+- **元认知**：`metacog_pred_a`、`metacog_pred_b`、`metacog_error_a`、`metacog_error_b`
+- **行为辅助指标**：`blocked_view_attempts_listb`
+
+### 实验2（独立实验，机制检验）：学习阶段双任务（听音按键）
+在确认采用“两项独立实验”设计后，实验2将作为**单独版本**运行（招募新样本），用于检验“认知卸载是否体现为编码阶段内部资源占用的变化”。实验2在 **List A 与 List B 的学习阶段**加入双任务（tone-discrimination），并以逐事件数据作为机制指标，而非替代实验1的主效应指标。
+
+**实验2用于解释实验1的机制不确定性：**
+- **区分“卸载”与“干扰/负荷”**：实验1若出现 `cloud/ai` 组记忆成绩下降（如 `listA_score` 降低），仅凭成绩无法区分其来源是“将编码资源转移至外部系统（卸载）”，还是“界面/工具引发分心与额外负荷（干扰）”。实验2通过双任务 RT/ACC 作为在线资源占用指标，提供对两种机制的可检验区分。
+- **检验策略回调/资源释放是否真实发生**：实验1中 List B 的变化（`listB_score`）可能混入疲劳、练习或材料差异。实验2在 A/B 均加入双任务，可使用被试内变化指标（\(\Delta RT=RT_B-RT_A\)、\(\Delta ACC=ACC_B-ACC_A\)）更直接评估在“不可再次呈现”提示后资源分配是否回调。
+- **补充解释元认知偏差来源**：实验1的 `metacog_error_a/b` 反映预测—表现偏差，但其来源可能是监控失败或策略错配。实验2提供“编码投入/资源占用”的额外证据，使对元认知偏差的解释更机制化（例如：投入下降但预测不降 → 把握感错觉风险更大）。
+
+**双任务说明（最小科学实现）：**
+- **任务**：在被试阅读陈述的 5 秒内，随机播放一次高/低音；高音按 `J`，低音按 `F`。
+- **出现概率**：每条陈述随机 0/1 次音调（示例：70% 有音调，30% 无音调），避免可预测性。
+- **出现时机**：在 5 秒内随机（示例：800–4200ms），避免固定时间点导致策略化反应。
+- **反应窗口**：音调出现后 1500ms 内记为有效反应；超时记为漏答。
+- **练习**：正式开始前加入 10–20 次练习（建议准确率 ≥70% 方可进入正式），以确保理解规则。
+- **控制要求**：建议佩戴耳机、固定音量、安静环境；记录浏览器/系统信息用于噪声控制。
+
+**建议记录（逐事件 trial-level data）：**
+`participant_id`、`condition`、`phase`(A/B)、`item_index`、`tone_type`(high/low)、`correct_key`(F/J)、`key_pressed`、`rt_ms`、`is_correct`(1/0)、`onset_ms`（音调出现时间点）
+
+**核心派生指标（用于机制分析）：**
+- 双任务准确率（ACC）与正确反应 RT（建议中位数）
+- **双任务成本变化**：\(\Delta RT = RT_B - RT_A\)、\(\Delta ACC = ACC_B - ACC_A\)（被试内变化更能抵消设备差异）
 
 ## 操纵说明
 
@@ -112,20 +145,67 @@ cd experiment
 pip3 install -r requirements.txt
 ```
 
-### 2. 启动服务
+### 2. 本地启动（仅本机调试）
 
 ```bash
 cd experiment
-python3 -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+export DB_PATH=./data/participants.db
+python3 -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-前端静态文件由 FastAPI 一并托管，直接访问：`http://localhost:8000`
+本机访问：`http://localhost:8000`
 
-### 3. 查看API文档
+### 3. 本地局域网部署（正式收数推荐）
 
-`http://localhost:8000/docs`
+适用场景：被试与主试在同一实验室/同一可互通内网（同一 WiFi 或有线局域网均可，不要求 WiFi 名称相同）。
 
-### 4. 调试指定组别
+**主试电脑启动服务：**
+
+```bash
+cd experiment
+export DB_PATH=./data/participants_exp1.db
+python3 -m uvicorn backend.main:app --host 0.0.0.0 --port 8000
+```
+
+**查看本机局域网 IP（Mac）：**
+
+```bash
+ipconfig getifaddr en0
+```
+
+假设输出为 `192.168.1.23`，则发给被试的链接为：
+
+```
+http://192.168.1.23:8000
+```
+
+**收数前 30 秒自检（必做）：**
+- 主试机先打开 `http://localhost:8000` 确认服务正常
+- 被试机浏览器打开 `http://192.168.1.23:8000`（不要用 localhost）
+- 若被试机打不开：检查是否在同一可互通内网、Mac 防火墙是否放行 8000、路由器是否开启 AP 隔离
+
+**正式收数注意：**
+- 实验期间主试电脑不要休眠/关机
+- 正式链接不要带 `?condition=`（仅开发调试使用）
+- 每收 5–10 名被试导出一次备份：
+
+```bash
+curl http://127.0.0.1:8000/api/export -o data/results_$(date +%F).csv
+cp data/participants_exp1.db data/backup/participants_exp1_$(date +%F).db
+```
+
+**实验1 / 实验2 本地并行（可选，两个端口）：**
+
+| 实验 | 分支 | 端口 | DB_PATH |
+|------|------|------|---------|
+| 实验1 | main | 8000 | `./data/participants_exp1.db` |
+| 实验2 | exp2 | 8001 | `./data/participants_exp2.db` |
+
+### 4. 查看API文档
+
+`http://localhost:8000/api/docs`
+
+### 5. 调试指定组别
 
 URL 后加 `?condition=` 参数可强制覆盖随机分组，仅用于开发调试：
 
@@ -144,13 +224,17 @@ http://localhost:8000/?condition=control
 | POST | `/api/register` | 注册被试，返回随机分配的组别 |
 | POST | `/api/submit` | 提交作答数据 |
 | POST | `/api/questionnaire` | 提交问卷数据 |
-| GET | `/api/export` | 导出全部数据为 CSV |
+| POST | `/api/dual_task` | 批量提交双任务逐事件数据（Exp2） |
+| GET | `/api/export` | 导出全部被试汇总 CSV |
+| GET | `/api/export/dual_task` | 导出双任务逐事件长表 CSV（Exp2） |
 | GET | `/api/status` | 查看三组当前人数 |
 
 ## 导出数据
 
 ```bash
 curl http://localhost:8000/api/export -o data/results.csv
+# Exp2 双任务长表
+curl http://127.0.0.1:8001/api/export/dual_task -o data/dual_task_events.csv
 ```
 
 CSV 主要字段说明：
@@ -174,6 +258,7 @@ CSV 主要字段说明：
 | cognitive_dep | 对工具辅助功能满意度（1-7） |
 | suspected_deception | 是否怀疑实验目的与说明不符（1/0） |
 | blocked_view_attempts_listb | List B 阶段尝试访问 cloud/AI 但被拦截的次数 |
+| （实验2）dual_task_* | 双任务逐事件或汇总指标（如 `tone_type`、`rt_ms`、`is_correct`、`onset_ms`；实验2建议独立表/独立导出） |
 
 ## 清空实验数据
 
@@ -228,6 +313,11 @@ rm data/participants.db
 **元认知分析：**
 - 独立样本 t 检验：`metacog_error_a`（预测值−实际值），控制组 vs. AI卸载组
 - 单样本 t 检验：各组 `metacog_error` 是否显著大于 0（验证普遍高估）
+
+**双任务机制分析（实验2）：**
+- 质量控制：双任务准确率（ACC）过低者可设阈值剔除或做敏感性分析（例如 ACC < 60%）
+- 主要检验：`condition × phase(A/B)` 对双任务 RT/ACC 的交互（更贴合“策略回调/资源释放”逻辑）
+- 关联/解释：双任务指标与 `listA_score/listB_score`、`metacog_error_a/metacog_error_b` 的相关或回归（作为机制证据，不将其等同于记忆成绩）
 
 **论文结果报告模板（可直接套用）：**
 - ANOVA：`F(df1, df2) = x.xx, p = .xxx, η²p = .xx`；事后比较使用 Tukey HSD，报告组间均值差、95% CI 与校正后 p 值

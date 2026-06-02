@@ -35,6 +35,7 @@
     if (localStorage.getItem('listA_test_started') === '1') {
       showCorrupted();
     } else {
+      localStorage.setItem('listA_aux_opened', '1');
       document.getElementById('save-time').textContent =
         '保存时间：' + new Date().toLocaleString('zh-CN');
       fetch('stimuli/listA.json')

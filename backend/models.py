@@ -41,3 +41,20 @@ class QuestionnaireData(BaseModel):
     cognitive_dep: int         # 1-7
     suspected_deception: int   # 1/0
     blocked_view_attempts_listb: int = 0  # List B 阶段被拦截的外部查看尝试次数
+
+
+class DualTaskItem(BaseModel):
+    phase: str
+    item_index: int
+    tone_type: Optional[str] = None
+    correct_key: Optional[str] = None
+    key_pressed: Optional[str] = None
+    rt_ms: Optional[int] = None
+    is_correct: int
+    onset_ms: Optional[int] = None
+    had_tone: int = 1
+
+
+class DualTaskSubmit(BaseModel):
+    participant_id: str
+    events: List[DualTaskItem]
